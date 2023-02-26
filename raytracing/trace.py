@@ -53,7 +53,7 @@ class Tracer:
             spheres : list[Sphere], 
             light : Light, 
             device : str,
-            tolerance : float = 0.001,
+            tolerance : float = 0.01,
             maxDistance : float = 1000) -> None:
 
         self.device = device
@@ -69,11 +69,12 @@ class Tracer:
         """
         GPU ray tracer
         """
-
-        # find the minimal intersection point
         rays = rays.to(self.device)
-        t = torch.full(rays.direction.shape[0:2], self.maxDistance).to(self.device)
-
+        t = torch.full(
+            [rays.direction.shape[0], 
+            rays.direction.shape[1], 1],
+            self.maxDistance).to(self.device)
+        
         for sphere in self.spheres:
             a = torch.sum(rays.direction ** 2, dim=2)
             ray_to_sphere = torch.subtract(rays.origin, sphere.pos)
@@ -83,18 +84,24 @@ class Tracer:
             mask = disc >= 0
             mask = mask.unsqueeze(2) 
             
-            q = - (b + torch.sign(b) * torch.sqrt(disc)) / 2
-            t_prime = torch.div(q, a).unsqueeze(2)
-            t_prime = torch.min(torch.div(c, q).unsqueeze(2), t_prime)
-            t_prime[~mask] = self.maxDistance
-            t = torch.min(t, t_prime)
+            q = -(b + torch.sign(b) * torch.sqrt(disc)) / 2
+            t_0 = torch.div(q, a).unsqueeze(2)
+            t_0[(t_0 < 0) | (torch.abs(t_0) < self.tolerance) | ~mask] = self.maxDistance
+            t_1 = torch.div(c, q).unsqueeze(2)
+            t_1[(t_1 < 0) | (torch.abs(t_1) < self.tolerance) | ~mask] = self.maxDistance
+
+            t = torch.min(t, torch.min(t_0, t_1))
 
         update = t < self.maxDistance
-        rays.origin[update] = (torch.mul(t, rays.direction) + rays.origin)[update]
-        rays.direction[update] = (self.light.pos - rays.origin)[update]
-        # slight offset to avoid hitting same surface again
-        rays.origin += self.tolerance * rays.direction
-        # normalize directions
-        rays.direction = torch.div(rays.direction, torch.norm(rays.direction, dim=2, keepdim=True))
+        update = update.squeeze()
 
-        return update
+        new_origin = torch.mul(t, rays.direction) + rays.origin
+        
+        new_direction = self.light.pos - new_origin
+        new_direction = torch.div(new_direction, torch.norm(new_direction, dim=2, keepdim=True))
+
+        new_origin[~update] = rays.origin[~update]
+        new_direction[~update] = rays.direction[~update]
+
+        new_rays = Rays(new_origin, new_direction)
+        return new_rays, update
