@@ -1,74 +1,6 @@
 import torch
-
-class Rays:
-    def __init__(
-            self, 
-            origin : torch.TensorType, 
-            direction : torch.TensorType, 
-            n : int, 
-            m : int,
-            color : torch.TensorType = None):
-        self.n = n
-        self.m = m
-        self.origin = origin
-        self.direction = direction
-        self.color = color
-
-    def create(origin, resolution : tuple, distance = 1):
-        n = resolution[0]
-        m = resolution[1]
-        frustum = torch.ones((resolution[0], resolution[1], 3), dtype=torch.float32)
-        frustum[..., 0] = torch.linspace(-1, 1, resolution[0]).view(-1, 1)
-        frustum[..., 1] = torch.linspace(-1, 1, resolution[1]).view(1, -1)
-        frustum[..., 2] = distance
-        # rays. xzy pos and xyz dir
-        ray_origin = origin.view(1, 1, 3).expand(resolution[0], resolution[1], 3)
-        ray_direction = frustum - ray_origin
-
-        ray_origin = ray_origin.view(n*m, 3)
-        ray_direction = ray_direction.view(n*m, 3)
-        ray_direction = torch.div(ray_direction, torch.norm(ray_direction, dim=1, keepdim=True))
-        ray_color = torch.ones_like(ray_direction)
-        return Rays(ray_origin, ray_direction, n, m, ray_color)
-
-    def to(self, device):
-        self.origin = self.origin.to(device)
-        self.direction = self.direction.to(device)
-        self.color = self.color.to(device)
-        return self
-    
-class Light:
-    def __init__(self, pos : list, color : list = None):
-        self.pos = torch.tensor(pos, dtype=torch.float32)
-        self.color = torch.tensor(color, dtype=torch.float32)
-
-    def to(self, device):
-        self.pos = self.pos.to(device)
-        self.color = self.color.to(device)
-        return self
-
-class Sphere:
-    def __init__(self, 
-        pos : list, 
-        radius : list,
-        color : list,
-        specular : float = 0.0,
-        diffuse : float = 0.0,
-        ambient : float = 0.0,
-        shininess : float = 0.0):
-        self.pos = torch.tensor(pos, dtype=torch.float32)
-        self.radius = torch.tensor(radius, dtype=torch.float32)
-        self.color = torch.tensor(color, dtype=torch.float32)
-        self.specular = specular
-        self.diffuse = diffuse
-        self.ambient = ambient
-        self.shininess = shininess
-
-    def to(self, device):
-        self.pos = self.pos.to(device)
-        self.radius = self.radius.to(device)
-        self.color = self.color.to(device)
-        return self
+from torch.nn.functional import normalize
+from primitives import Rays, Light, Sphere
 
 class Tracer:
     def __init__(
@@ -77,10 +9,12 @@ class Tracer:
             light : Light, 
             ambient : list,
             device : str,
+            max_recursion_depth : int = 4,
             tolerance : float = 0.01,
-            maxDistance : float = 1000) -> None:
+            max_distance : float = 1000) -> None:
 
         self.device = device
+        self.max_recursion_depth = max_recursion_depth
         self.spheres = spheres
         for sphere in spheres:
             sphere = sphere.to(device)
@@ -88,9 +22,9 @@ class Tracer:
         self.light = light.to(device)
         self.ambient = torch.tensor(ambient, dtype=torch.float32).to(device)
         self.tolerance = tolerance
-        self.maxDistance = maxDistance
+        self.maxDistance = max_distance
 
-    def __call__(self, rays : Rays):
+    def __call__(self, rays : Rays, recursion_depth : int = 0, shadow : bool = False):
         """
         GPU ray tracer
         """
@@ -99,13 +33,16 @@ class Tracer:
 
         t = torch.full((nm, 1), self.maxDistance).to(self.device)
     
-        t_ind = torch.full((nm, 1), -1).to(self.device)
+        t_ind = torch.full((nm, 1), 0).to(self.device)
         
         n_spheres = len(self.spheres)
         ambient_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
         diffuse_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
         specular_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
         shininess_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
+        refraction_index = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
+        transparency_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
+        reflection_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
         colors = torch.zeros((3, n_spheres), dtype=torch.float32).to(self.device)
         positions = torch.zeros((3, n_spheres), dtype=torch.float32).to(self.device)
 
@@ -132,8 +69,17 @@ class Tracer:
             diffuse_koef[index] = sphere.diffuse
             specular_koef[index] = sphere.specular
             shininess_koef[index] = sphere.shininess
+            refraction_index[index] = sphere.refractive_index
             colors[:,index] = sphere.color
             positions[:,index] = sphere.pos
+            transparency_koef[index] = sphere.transparency
+            reflection_koef[index] = sphere.reflection
+
+        update = t < self.maxDistance
+        update = update.squeeze()
+
+        if shadow:
+            return update
 
         # compute one hot encodings of sphere index which was hit by each ray
         t_ind = t_ind.squeeze(1)
@@ -142,7 +88,6 @@ class Tracer:
         one_hot_indices = one_hot_indices.to(self.device)
         one_hot_indices = one_hot_indices.unsqueeze(-1)
         
-        #base_color
         colors = colors.view(1, n_spheres, 3)
         colors = colors.expand(nm, -1, -1)
         base_color = torch.matmul(colors, one_hot_indices)
@@ -158,38 +103,58 @@ class Tracer:
         specular_koef = torch.sum(torch.mul(one_hot_indices, specular_koef), dim=1, keepdim=True)
         diffuse_koef = torch.sum(torch.mul(one_hot_indices, diffuse_koef), dim=1, keepdim=True)
         shininess_koef = torch.sum(torch.mul(one_hot_indices, shininess_koef), dim=1, keepdim=True)
-
-        print(ambient_koef.shape)
+        refraction_index = torch.sum(torch.mul(one_hot_indices, refraction_index), dim=1, keepdim=True)
+        transparency_koef = torch.sum(torch.mul(one_hot_indices, transparency_koef), dim=1, keepdim=True)
+        reflection_koef = torch.sum(torch.mul(one_hot_indices, reflection_koef), dim=1, keepdim=True)
 
         new_origin = torch.mul(t, rays.direction) + rays.origin
-        normal = torch.sub(new_origin, sphere_pos)
-        normal = torch.div(normal, torch.norm(normal, dim=1, keepdim=True))
-        light = self.light.pos - new_origin
-        light = torch.div(light, torch.norm(light, dim=1, keepdim=True))
-        halfway = torch.add(light, -rays.direction)
-        halfway = torch.div(halfway, torch.norm(halfway, dim=1, keepdim=True))
+        normal = normalize(torch.sub(new_origin, sphere_pos))
+        light = normalize(self.light.pos - new_origin)
+        halfway = normalize(torch.add(light, -rays.direction))
+     
         angle_light_normal = torch.sum(normal * light, dim=1, keepdim=True)
         torch.clamp(angle_light_normal, min=0, out=angle_light_normal)
 
         halfway_angle = torch.sum(normal * halfway, dim=1, keepdim=True)
         torch.clamp(halfway_angle, min=0, out=halfway_angle)
-        # ambient contribution
+
+        shadow_ray_direction = normalize(self.light.pos - new_origin)
+        shadow_rays = Rays(new_origin, shadow_ray_direction, None, rays.n, rays.m)
+        shadow = self(shadow_rays, 0, True)
+        shadow = ~shadow.unsqueeze(-1)
+
+        # Blinn Phong: ambient, diffuse, specular
         color = self.ambient * ambient_koef
-        # diffuse contribution
-        color += diffuse_koef * base_color * angle_light_normal
-        # specular contribution
-        color += specular_koef * self.light.color * halfway_angle ** shininess_koef
+        color += diffuse_koef * base_color * angle_light_normal * shadow
+        color += specular_koef * self.light.color * halfway_angle ** shininess_koef * shadow
 
+        if recursion_depth < self.max_recursion_depth:
 
-        update = t < self.maxDistance
-        update = update.squeeze()
+            ext_refl_direction = normalize(rays.direction - 2 * torch.sum(rays.direction * normal, dim=1, keepdim=True) * normal)
+            # same refraction index as the ray does not enter the sphere
+            ext_refl_rays = Rays(new_origin, ext_refl_direction, rays.refraction_index ,rays.n, rays.m)
+
+            # for the refraction formula:
+            # https://registry.khronos.org/OpenGL-Refpages/gl4/html/refract.xhtml
+            eta =  refraction_index / rays.refraction_index
+            dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
+            k = 1 - eta ** 2 * (1 - dot_prod ** 2)
+            k[k < 0] = 0
+            int_refl_direction = normalize(eta * rays.direction - (eta * dot_prod + torch.sqrt(k)) * normal)
+            int_refl_rays = Rays(new_origin, int_refl_direction, refraction_index, rays.n, rays.m)
+            
+            reflection = self(ext_refl_rays, recursion_depth + 1, False)
+            refraction = self(int_refl_rays, recursion_depth + 1, False)
+
+            # Fresnel
+            # https://en.wikipedia.org/wiki/Schlick%27s_approximation
+            r0 = (rays.refraction_index - refraction_index) / (rays.refraction_index + refraction_index)
+            r0 = r0 ** 2
+            fresnel = r0 + (1 - r0) * (1 - torch.abs(dot_prod)) ** 5
+
+            color += fresnel * reflection * reflection_koef
+            color += (1 - fresnel) * refraction * transparency_koef
+
         color[~update] = torch.tensor([0, 0, 0], dtype=torch.float32).to(self.device)
 
-        new_direction = self.light.pos - new_origin
-        new_direction = torch.div(new_direction, torch.norm(new_direction, dim=1, keepdim=True))
-
-        new_origin[~update] = rays.origin[~update]
-        new_direction[~update] = rays.direction[~update]
-
-        new_rays = Rays(new_origin, new_direction, rays.n, rays.m, color)
-        return new_rays, update
+        return color
