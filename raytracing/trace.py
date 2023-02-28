@@ -86,10 +86,11 @@ class Tracer:
             rays.direction.shape[1], 1],
             self.maxDistance).to(self.device)
         
-        t_ind = torch.full(
-            [rays.direction.shape[0],
-            rays.direction.shape[1], 1], -1
-            ).to(self.device)
+        n = rays.direction.shape[0]
+        m = rays.direction.shape[1]
+        t_ind = torch.full((n, m), -1).to(self.device)
+        print(n, m)
+        print(t_ind.shape)
         
         n_spheres = len(self.spheres)
         ambient_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
@@ -97,6 +98,7 @@ class Tracer:
         specular_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
         shininess_koef = torch.zeros(n_spheres, dtype=torch.float32).to(self.device)
         colors = torch.zeros((n_spheres, 3), dtype=torch.float32).to(self.device)
+        positions = torch.zeros((n_spheres, 3), dtype=torch.float32).to(self.device)
 
         for index, sphere in enumerate(self.spheres):
             a = torch.sum(rays.direction ** 2, dim=2)
@@ -114,26 +116,35 @@ class Tracer:
             t_1[(t_1 < 0) | (torch.abs(t_1) < self.tolerance) | ~mask] = self.maxDistance
             t_0 = torch.min(t_0, t_1)
             t = torch.min(t, t_0)
-            t_ind = torch.where(t_0 == t, torch.full_like(t_ind, index), t_ind)
+            t_ind = torch.where(t_0 == t, index, t_ind)
 
             ambient_koef[index] = sphere.ambient
             diffuse_koef[index] = sphere.diffuse
             specular_koef[index] = sphere.specular
             shininess_koef[index] = sphere.shininess
             colors[index] = sphere.color
+            positions[index] = sphere.pos
 
-        t_ind = t_ind.squeeze(2)
+        #t_ind = t_ind.squeeze(2)
+        print(t_ind.shape)
         one_hot_indices = torch.nn.functional.one_hot(t_ind, num_classes=n_spheres)
         one_hot_indices = one_hot_indices.to(self.device)
+        print(one_hot_indices.shape)
+        #base_color
+        colors = colors.repeat(n, m)
+        print(colors.shape)
+        base_color = torch.matmul(colors, one_hot_indices)
+        
 
-        base_color = torch.einsum('ijk,lm->ijk', one_hot_indices, colors)
+        
+        sphere_pos = torch.einsum('ijk,lm->ijk', one_hot_indices, positions)
         ambient_koef = torch.sum(torch.mul(one_hot_indices, ambient_koef), dim=2, keepdim=True)
         specular_koef = torch.sum(torch.mul(one_hot_indices, specular_koef), dim=2, keepdim=True)
         diffuse_koef = torch.sum(torch.mul(one_hot_indices, diffuse_koef), dim=2, keepdim=True)
         shininess_koef = torch.sum(torch.mul(one_hot_indices, shininess_koef), dim=2, keepdim=True)
 
         new_origin = torch.mul(t, rays.direction) + rays.origin
-        normal = torch.sub(new_origin, sphere.pos)
+        normal = torch.sub(new_origin, sphere_pos)
         normal = torch.div(normal, torch.norm(normal, dim=2, keepdim=True))
         light = self.light.pos - new_origin
         light = torch.div(light, torch.norm(light, dim=2, keepdim=True))
@@ -150,8 +161,10 @@ class Tracer:
         # diffuse contribution
         color += diffuse_koef * base_color * angle_light_normal
         # specular contribution
-        color += specular_koef * self.light.color * halfway_angle ** shininess_koef
+        #color += specular_koef * self.light.color * halfway_angle ** shininess_koef
+        color = base_color
 
+        #color = sphere_pos
         update = t < self.maxDistance
         update = update.squeeze()
         color[~update] = torch.tensor([0, 0, 0], dtype=torch.float32).to(self.device)

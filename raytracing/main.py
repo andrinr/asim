@@ -6,7 +6,9 @@ from trace import Rays, Light, Sphere, Tracer
 frustum_resolution = (500, 500)
 
 rays = Rays.create(torch.tensor([0, 0, 0], dtype=torch.float32), frustum_resolution)
-light = Light([2, 4, -2], [1, 1, 1])
+light = Light(
+    pos=[3, 1, -2], 
+    color=[1, 1, 1])
 
 spheres = []
 spheres.append(Sphere(
@@ -41,7 +43,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 torch.cuda.empty_cache()
 
-tracer = Tracer(spheres, light, [1.0, 1.0, 0], device)
+tracer = Tracer(spheres, light, ambient=[1.0, 1.0, 0], device=device)
 
 secondary_rays, object_hit = tracer(rays)
 tertiary_rays, light_blocked = tracer(secondary_rays)
