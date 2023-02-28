@@ -15,16 +15,16 @@ spheres.append(Sphere(
     pos=[0, 0, 3], 
     radius=[1], 
     color=[1.0, 0.0, 0.0], 
-    specular=1.0, 
+    specular=0.1, 
     diffuse=1.0, 
     ambient=0.1, 
-    shininess=16.0))
+    shininess=10.0))
 
 spheres.append(Sphere(
     pos=[0, 0.6, 2], 
     radius=[0.2], 
     color=[0.0, 0.0, 1.0], 
-    specular=1.0, 
+    specular=0.1, 
     diffuse=1.0, 
     ambient=0.1, 
     shininess=15.0))
@@ -33,7 +33,7 @@ spheres.append(Sphere(
     pos=[0.3, -0.4, 2], 
     radius=[0.5], 
     color=[0.0, 1.0, 1.0], 
-    specular=1.0, 
+    specular=0.7, 
     diffuse=1.0, 
     ambient=0.1, 
     shininess=15.0))
@@ -43,13 +43,13 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 torch.cuda.empty_cache()
 
-tracer = Tracer(spheres, light, ambient=[1.0, 1.0, 0], device=device)
+tracer = Tracer(spheres, light, ambient=[1.0, 1.0, 1.0], device=device)
 
 secondary_rays, object_hit = tracer(rays)
 tertiary_rays, light_blocked = tracer(secondary_rays)
 
 image = object_hit * ~light_blocked
-image = secondary_rays.color
+image = secondary_rays.color.view(frustum_resolution[0], frustum_resolution[1], -1)
 image = image.cpu().numpy()
 
 
