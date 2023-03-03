@@ -6,26 +6,21 @@ from trace import Tracer
 
 frustum_resolution = (800, 800)
 
-rays = Rays.create(torch.tensor([0, 0, 0], dtype=torch.float32), frustum_resolution)
-light = Light(
-    pos=[3, 1, -2], 
-    color=[1, 1, 1])
-
 spheres = []
 spheres.append(Sphere(
-    pos=[0, 0, 3], 
-    radius=[1], 
+    pos=[0, 0, 5], 
+    radius=[0.6], 
     color=[1.0, 0.0, 0.0], 
     specular=0.1, 
     diffuse=1.0, 
     ambient=0.1, 
     shininess=10.0,
-    refractive_index=1.5,
-    reflection=0.9,
-    transparency=.0))
+    refractive_index=1.2,
+    reflection=1.0,
+    transparency=0))
 
 spheres.append(Sphere(
-    pos=[0, 0.6, 2], 
+    pos=[0, 0.4, 2.9], 
     radius=[0.2], 
     color=[0.0, 0.0, 1.0], 
     specular=0.1, 
@@ -33,27 +28,44 @@ spheres.append(Sphere(
     ambient=0.1, 
     shininess=15.0,
     refractive_index=1.2,
-    reflection=0.9,
-    transparency=0))
+    reflection=1.0,
+    transparency=0.))
 
 spheres.append(Sphere(
-    pos=[0.3, -0.4, 2], 
-    radius=[0.5], 
+    pos=[0.3, -0.4, 3.8], 
+    radius=[0.3], 
     color=[0.0, 1.0, 1.0], 
     specular=0.7, 
     diffuse=1.0, 
     ambient=0.1, 
     shininess=15.0,
-    refractive_index=0.9,
+    refractive_index=1.1,
+    reflection=1.0,
+    transparency=0.))
+
+spheres.append(Sphere(
+    pos=[-0.1, 0.1, 1.8], 
+    radius=[0.1], 
+    color=[1.0, 1.0, 1.0], 
+    specular=0.7, 
+    diffuse=1.0, 
+    ambient=0.1, 
+    shininess=15.0,
+    refractive_index=1.1,
     reflection=0.,
-    transparency=0))
+    transparency=1.0))
+
+rays = Rays.create(torch.tensor([0, 0, 0], dtype=torch.float32), frustum_resolution, len(spheres))
+light = Light(
+    pos=[3, 1, -2], 
+    color=[1, 1, 1])
 
 # gpu acceleration
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 torch.cuda.empty_cache()
 
-tracer = Tracer(spheres, light, ambient=[1.0, 1.0, 1.0], device=device, max_recursion_depth=2)
+tracer = Tracer(spheres, light, ambient=[1.0, 1.0, 1.0], device=device, max_recursion_depth=3)
 
 # 1st pass for blinn phong shading
 color = tracer(rays)

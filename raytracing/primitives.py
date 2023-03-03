@@ -4,17 +4,15 @@ class Rays:
     def __init__(
             self, 
             origin : torch.TensorType, 
-            direction : torch.TensorType, 
-            refraction_index : torch.TensorType,
+            direction : torch.TensorType,
             n : int, 
             m : int):
         self.n = n
         self.m = m
         self.origin = origin
         self.direction = direction
-        self.refraction_index = refraction_index
 
-    def create(origin, resolution : tuple, distance = 1, refraction_index = 1.0):
+    def create(origin, resolution : tuple, distance = 1):
         n = resolution[0]
         m = resolution[1]
         frustum = torch.ones((resolution[0], resolution[1], 3), dtype=torch.float32)
@@ -29,12 +27,12 @@ class Rays:
         ray_direction = ray_direction.view(n*m, 3)
         ray_direction = torch.div(ray_direction, torch.norm(ray_direction, dim=1, keepdim=True))
 
-        refraction_index = torch.ones((n*m, 1), dtype=torch.float32) * refraction_index
-        return Rays(ray_origin, ray_direction, refraction_index, n, m)
+        return Rays(ray_origin, ray_direction, n, m)
 
     def to(self, device):
         self.origin = self.origin.to(device)
         self.direction = self.direction.to(device)
+
         return self
     
 class Light:
