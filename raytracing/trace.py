@@ -136,21 +136,24 @@ class Tracer:
         color += (1-transparency_koef) * specular_koef * self.light.color * halfway_angle ** shininess_koef * shadow
 
         if recursion_depth < self.max_recursion_depth:
+            
+            dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
 
-            ext_refl_direction = normalize(rays.direction - 2 * torch.sum(rays.direction * normal, dim=1, keepdim=True) * normal)
+            ext_refl_direction = normalize(rays.direction - 2 * dot_prod * normal)
             # same refraction index as the ray does not enter the sphere
             ext_refl_rays = Rays(new_origin, ext_refl_direction, rays.n, rays.m)
             entering = torch.sum(normal * rays.direction, dim=1, keepdim=True) < 0
             # for the refraction formula:
             # https://registry.khronos.org/OpenGL-Refpages/gl4/html/refract.xhtml
-            eta = torch.where(entering,  refraction_koef / self.air_refraction_index, self.air_refraction_index / refraction_koef)
-            dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
-            k = 1 - eta ** 2 * (1 - dot_prod ** 2)
+            n1 = torch.where(entering, self.air_refraction_index, refraction_koef)
+            n2 = torch.where(entering, refraction_koef, self.air_refraction_index)
+            n = n1 / n2;
+            k = 1. - n ** 2 * (1 - dot_prod ** 2)
             
             int_refl_direction = torch.where(
                 k < 0, 
                 torch.zeros(nm, 3), 
-                normalize(eta * rays.direction - (eta * dot_prod + torch.sqrt(k)) * normal)
+                normalize(n * rays.direction + (n * dot_prod - torch.sqrt(k)) * normal)
             )
 
             material_id = material_id.to(dtype=torch.long)
@@ -161,17 +164,17 @@ class Tracer:
 
             # Fresnel
             # https://en.wikipedia.org/wiki/Schlick%27s_approximation
-            #r0 = (prev_refraction - hit_refraction) / (prev_refraction + hit_refraction)
-            #r0 = r0 ** 2 
-            #fresnel = r0 + (1 - r0) * (1 - torch.abs(dot_prod)) ** 5
+            r0 = (n1 - n2) / (n1 + n1)
+            r0 = r0 ** 2 
+            fresnel = r0 + (1 - r0) * (1 - torch.abs(dot_prod)) ** 5
 
             #color = torch.max(fresnel * ext_reflection * reflection_koef, color)
-            color = torch.max(ext_reflection * reflection_koef, color)
-            color = torch.max(int_reflection * transparency_koef, color)
+            color = torch.max(fresnel * ext_reflection * reflection_koef, color)
+            color = torch.max((1-fresnel) * int_reflection * transparency_koef, color)
 
             #color = ext_refl_direction
 
-            color = int_refl_direction * 0.5 + 0.5
+            #color = int_refl_direction * 0.5 + 0.5
 
         color[~update] = torch.tensor([0, 0, 0], dtype=torch.float32).to(self.device)
 

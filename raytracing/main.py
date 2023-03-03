@@ -17,7 +17,7 @@ spheres.append(Sphere(
     shininess=10.0,
     refractive_index=1.2,
     reflection=1.0,
-    transparency=0))
+    transparency=0.))
 
 spheres.append(Sphere(
     pos=[0, 0.4, 2.9], 
@@ -29,7 +29,7 @@ spheres.append(Sphere(
     shininess=15.0,
     refractive_index=1.2,
     reflection=1.0,
-    transparency=0.))
+    transparency=0.5))
 
 spheres.append(Sphere(
     pos=[0.3, -0.4, 3.8], 
@@ -44,15 +44,15 @@ spheres.append(Sphere(
     transparency=0.))
 
 spheres.append(Sphere(
-    pos=[-0.1, 0.1, 1.8], 
+    pos=[-0.1, 0.3, 2.4], 
     radius=[0.1], 
     color=[1.0, 1.0, 1.0], 
-    specular=0.7, 
+    specular=0.9, 
     diffuse=1.0, 
     ambient=0.1, 
-    shininess=15.0,
+    shininess=18.0,
     refractive_index=1.1,
-    reflection=0.,
+    reflection=1.0,
     transparency=1.0))
 
 rays = Rays.create(torch.tensor([0, 0, 0], dtype=torch.float32), frustum_resolution, len(spheres))
