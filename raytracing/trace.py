@@ -167,14 +167,16 @@ class Tracer:
             r0 = (n1 - n2) / (n1 + n1)
             r0 = r0 ** 2 
             fresnel = r0 + (1 - r0) * (1 - torch.abs(dot_prod)) ** 5
+            
+            color = torch.max(ext_reflection * reflection_koef, color)
+            color = torch.max(int_reflection * transparency_koef, color)
+
+            color += int_reflection * transparency_koef
+
+            #color = sphere_pos
 
             #color = torch.max(fresnel * ext_reflection * reflection_koef, color)
-            color = torch.max(fresnel * ext_reflection * reflection_koef, color)
-            color = torch.max((1-fresnel) * int_reflection * transparency_koef, color)
-
-            #color = ext_refl_direction
-
-            #color = int_refl_direction * 0.5 + 0.5
+            #color = torch.max((1-fresnel) * int_reflection * transparency_koef, color)
 
         color[~update] = torch.tensor([0, 0, 0], dtype=torch.float32).to(self.device)
 

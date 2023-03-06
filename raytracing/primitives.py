@@ -1,4 +1,5 @@
 import torch
+from torch.nn.functional import normalize
 
 class Rays:
     def __init__(
@@ -24,8 +25,7 @@ class Rays:
         ray_direction = frustum - ray_origin
 
         ray_origin = ray_origin.view(n*m, 3)
-        ray_direction = ray_direction.view(n*m, 3)
-        ray_direction = torch.div(ray_direction, torch.norm(ray_direction, dim=1, keepdim=True))
+        ray_direction = normalize(ray_direction.view(n*m, 3))
 
         return Rays(ray_origin, ray_direction, n, m)
 
