@@ -35,6 +35,7 @@ class Rays:
 
         return self
     
+
 class Light:
     def __init__(self, pos : list, color : list = None):
         self.pos = torch.tensor(pos, dtype=torch.float32)
@@ -67,6 +68,24 @@ class Sphere:
         self.refractive_index = refractive_index
         self.transparency = transparency
         self.reflection = reflection
+
+    def intersect(self, rays : Rays):
+        a = torch.sum(rays.direction ** 2, dim=1)
+        ray_to_sphere = torch.subtract(rays.origin, sphere.pos)
+        b = 2 * torch.sum(ray_to_sphere * rays.direction, dim=1)
+        c = torch.sum(ray_to_sphere ** 2, dim=1) - sphere.radius ** 2
+        disc = b ** 2 - 4 * a * c
+        mask = disc >= 0
+        mask = mask.unsqueeze(1)
+        
+        q = -(b + torch.sign(b) * torch.sqrt(disc)) / 2
+        t_0 = torch.div(q, a).unsqueeze(1)
+        t_0[(t_0 < 0) | (torch.abs(t_0) < self.tolerance) | ~mask] = self.maxDistance + 1
+        t_1 = torch.div(c, q).unsqueeze(1)
+        t_1[(t_1 < 0) | (torch.abs(t_1) < self.tolerance) | ~mask] = self.maxDistance + 1
+        t_0 = torch.min(t_0, t_1)
+
+        return t_0, mask
 
     def to(self, device):
         self.pos = self.pos.to(device)
