@@ -91,6 +91,7 @@ class Tracer:
 
         new_origin = torch.mul(t, rays.direction) + rays.origin
         normal = normalize(torch.sub(new_origin, sphere_pos))
+        new_origin += 0.001 * normal
         light = normalize(self.light.position - new_origin)
         halfway = normalize(torch.add(light, -rays.direction))
      
@@ -144,12 +145,14 @@ class Tracer:
             r0 = r0 ** 2 
             fresnel = r0 + (1 - r0) * (1 - torch.abs(dot_prod)) ** 5
             
-            #color = torch.max(ext_reflection * reflection_koef, color)
-            #color = torch.max(int_reflection * transparency_koef, color)
+            color = torch.max(ext_reflection * reflection_koef, color)
+            color = torch.max(int_reflection * transparency_koef, color)
 
-            color += fresnel * (ext_reflection * reflection_koef)
-            color += (1-fresnel) * int_reflection * transparency_koef
+            #color += fresnel * (ext_reflection * reflection_koef)
+            #color += (1-fresnel) * int_reflection * transparency_koef
 
+            #color += ext_reflection * reflection_koef
+            #color += int_reflection * transparency_koef
             #color = sphere_pos
 
             #color = torch.max(fresnel * ext_reflection * reflection_koef, color)
