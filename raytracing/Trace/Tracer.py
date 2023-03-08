@@ -1,6 +1,7 @@
 import torch
 from torch.nn.functional import normalize
 import Trace as tr
+from tqdm import tqdm
 
 class Tracer:
     def __init__(
@@ -18,7 +19,20 @@ class Tracer:
         self.air_refraction_index = air_refraction_index
         self.horizon = horizon
 
-    def __call__(self, rays : tr.Rays, recursion_depth : int = 0, shadow : bool = False):
+    def __call__(self, rays_grid : tr.RaysGrid, recursion_depth : int = 0, shadow : bool = False):
+        local_n = rays_grid.rays[0].n
+        local_m = rays_grid.rays[0].m
+        color = torch.zeros((local_n * rays_grid.n, local_m * rays_grid.m, 3), dtype=torch.float32)
+        for k in tqdm(range(rays_grid.n * rays_grid.m)):
+            i = k // rays_grid.m
+            j = k % rays_grid.m
+
+            local_color = self.trace(rays_grid.rays[k], recursion_depth, shadow)
+            color[i * local_n:(i + 1) * local_n, j * local_m:(j + 1) * local_m] = local_color.view(local_n, local_m, 3)
+        
+        return color
+
+    def trace(self, rays : tr.Rays, recursion_depth : int = 0, shadow : bool = False):
         """
         GPU ray tracer
         """
@@ -60,13 +74,24 @@ class Tracer:
 
         if shadow:
             return update
+        
+        if torch.sum(update) == 0:
+            return torch.zeros((nm, 3), dtype=torch.float32)
 
         # compute one hot encodings of sphere index which was hit by each ray
         material_id = material_id.squeeze(1)
-        print(n_meshes, torch.max(material_id))
         material_id = torch.nn.functional.one_hot(material_id, num_classes=n_meshes)
         material_id = material_id.float()
         material_id = material_id 
+
+        ambient_koef = torch.sum(torch.mul(material_id, ambient_koef), dim=1, keepdim=True)
+        specular_koef = torch.sum(torch.mul(material_id, specular_koef), dim=1, keepdim=True)
+        diffuse_koef = torch.sum(torch.mul(material_id, diffuse_koef), dim=1, keepdim=True)
+        shininess_koef = torch.sum(torch.mul(material_id, shininess_koef), dim=1, keepdim=True)
+        reflection_koef = torch.sum(torch.mul(material_id, reflection_koef), dim=1, keepdim=True)
+        transparency_koef = torch.sum(torch.mul(material_id, transparency_koef), dim=1, keepdim=True)
+        refraction_koef = torch.sum(torch.mul(material_id, refraction_koef), dim=1, keepdim=True)
+
         material_id = material_id.unsqueeze(-1)
         
         colors = colors.view(1, 3, n_meshes)
@@ -78,16 +103,6 @@ class Tracer:
         positions = positions.expand(nm, -1, -1)
         sphere_pos = torch.matmul(positions, material_id)
         sphere_pos = sphere_pos.squeeze()
-        
-        material_id = material_id.squeeze()
-        ambient_koef = torch.sum(torch.mul(material_id, ambient_koef), dim=1, keepdim=True)
-        specular_koef = torch.sum(torch.mul(material_id, specular_koef), dim=1, keepdim=True)
-        diffuse_koef = torch.sum(torch.mul(material_id, diffuse_koef), dim=1, keepdim=True)
-        shininess_koef = torch.sum(torch.mul(material_id, shininess_koef), dim=1, keepdim=True)
-        reflection_koef = torch.sum(torch.mul(material_id, reflection_koef), dim=1, keepdim=True)
-        transparency_koef = torch.sum(torch.mul(material_id, transparency_koef), dim=1, keepdim=True)
-
-        refraction_koef = torch.sum(torch.mul(material_id, refraction_koef), dim=1, keepdim=True)
 
         new_origin = torch.mul(t, rays.direction) + rays.origin
         normal = normalize(torch.sub(new_origin, sphere_pos))
@@ -103,7 +118,7 @@ class Tracer:
 
         shadow_ray_direction = normalize(self.light.position - new_origin)
         shadow_rays = tr.Rays(new_origin, shadow_ray_direction, rays.n, rays.m)
-        shadow = self(shadow_rays, 0, True)
+        shadow = self.trace(shadow_rays, 0, True)
         shadow = shadow.unsqueeze(-1)
         shadow = ~shadow
 
@@ -112,7 +127,10 @@ class Tracer:
         color += (1-transparency_koef) * diffuse_koef * base_color * angle_light_normal * shadow
         color += (1-transparency_koef) * specular_koef * self.light.color * halfway_angle ** shininess_koef * shadow
 
-        if recursion_depth < self.max_recursion_depth:
+        if torch.sum(reflection_koef) == 0 and torch.sum(transparency_koef) == 0:
+            return color
+
+        if recursion_depth + 1 < self.max_recursion_depth:
             
             dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
 
@@ -133,26 +151,25 @@ class Tracer:
                 normalize(n * rays.direction + (n * dot_prod - torch.sqrt(k)) * normal)
             )
 
-            material_id = material_id.to(dtype=torch.long)
             int_refl_rays = tr.Rays(new_origin, int_refl_direction, rays.n, rays.m)
             
-            ext_reflection = self(ext_refl_rays, recursion_depth + 1, False)
-            int_reflection = self(int_refl_rays, recursion_depth + 1, False)
+            ext_reflection = self.trace(ext_refl_rays, recursion_depth + 1, False)
+            int_reflection = self.trace(int_refl_rays, recursion_depth + 1, False)
 
             # Fresnel
             # https://en.wikipedia.org/wiki/Schlick%27s_approximation
-            r0 = (n1 - n2) / (n1 + n1)
-            r0 = r0 ** 2 
-            fresnel = r0 + (1 - r0) * (1 - torch.abs(dot_prod)) ** 5
+            # r0 = (n1 - n2) / (n1 + n1)
+            # r0 = r0 ** 2 
+            # fresnel = r0 + (1 - r0) * (1 - torch.abs(dot_prod)) ** 5
             
-            color = torch.max(ext_reflection * reflection_koef, color)
-            color = torch.max(int_reflection * transparency_koef, color)
+            #color = torch.max(ext_reflection * reflection_koef, color)
+            #color = torch.max(int_reflection * transparency_koef, color)
 
             #color += fresnel * (ext_reflection * reflection_koef)
             #color += (1-fresnel) * int_reflection * transparency_koef
 
-            #color += ext_reflection * reflection_koef
-            #color += int_reflection * transparency_koef
+            color += ext_reflection * reflection_koef
+            color += int_reflection * transparency_koef
             #color = sphere_pos
 
             #color = torch.max(fresnel * ext_reflection * reflection_koef, color)

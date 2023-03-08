@@ -22,9 +22,9 @@ class Sphere(tr.Object):
         
         q = -(b + torch.sign(b) * torch.sqrt(disc)) / 2
         t_0 = torch.div(q, a).unsqueeze(1)
-        t_0[(t_0 < 0) | (torch.abs(t_0) < tolerance) | ~mask] = horizon + 1
+        t_0[(t_0 < 0) |  ~mask] = horizon + 1
         t_1 = torch.div(c, q).unsqueeze(1)
-        t_1[(t_1 < 0) | (torch.abs(t_1) < tolerance) | ~mask] = horizon + 1
+        t_1[(t_1 < 0) | ~mask] = horizon + 1
         t_0 = torch.min(t_0, t_1)
 
         return t_0

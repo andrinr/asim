@@ -23,25 +23,25 @@ class PolygonObject(tr.Object):
             v1 = self.vertices[face[1]]
             v2 = self.vertices[face[2]]
 
-            edge1 = v1 - v0
-            edge2 = v2 - v0
+            e1 = v1 - v0
+            e2 = v2 - v0
 
-            h = torch.cross(rays.direction, edge2)
-            a = torch.sum(edge1 * h, dim=1)
-            mask = a > tolerance
-            mask = mask.unsqueeze(1)
+            normal = torch.cross(e1, e2)
+            # denom = torch.sum(rays.direction * normal, axis=1)
+            # mask = torch.abs(denom) < tolerance
+            # t_0 = torch.where(mask, torch.full((nm, 1), float('inf')), t)
+            # t = torch.where(mask & torch.sum(rays.origin * normal, axis=1) / denom
 
-            s = rays.origin - v0
-            u = torch.div(torch.sum(s * h, dim=1), a).unsqueeze(1)
-            u[(u < 0) | ~mask] = horizon + 1
+            # # check plane intersection
 
-            q = torch.cross(s, edge1)
-            v = torch.div(torch.sum(rays.direction * q, dim=1), a).unsqueeze(1)
-            v[(v < 0) | (u + v > 1) | ~mask] = horizon + 1
+            # t = torch.matmul(normal, v0) - torch.matmul(normal, rays.origin)
+            # # check if ray hits inside the triangle
+            # max_index = torch.argmax(torch.abs(normal))
 
-            t = torch.div(torch.sum(edge2 * q, dim=1), a).unsqueeze(1)
-            t[(t < 0) | ~mask] = horizon + 1
+            # #project to 2D
+            # e1 = torch.cat((e1[0:max_index], e1[max_index+1:]))
+            # e2 = torch.cat((e2[0:max_index], e2[max_index+1:]))
 
-            return t
-        pass
+        
+        return t
 
