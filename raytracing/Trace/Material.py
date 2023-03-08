@@ -19,6 +19,3 @@ class Material:
         self.refractive_index = refractive_index
         self.transparency = transparency
         self.reflection = reflection
-
-        
-  

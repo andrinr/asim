@@ -100,7 +100,7 @@ class Tracer:
         halfway_angle = torch.sum(normal * halfway, dim=1, keepdim=True)
         torch.clamp(halfway_angle, min=0, out=halfway_angle)
 
-        shadow_ray_direction = normalize(self.light.pos - new_origin)
+        shadow_ray_direction = normalize(self.light.position - new_origin)
         shadow_rays = tr.Rays(new_origin, shadow_ray_direction, rays.n, rays.m)
         shadow = self(shadow_rays, 0, True)
         shadow = shadow.unsqueeze(-1)
@@ -147,8 +147,8 @@ class Tracer:
             #color = torch.max(ext_reflection * reflection_koef, color)
             #color = torch.max(int_reflection * transparency_koef, color)
 
-            color += ext_reflection * reflection_koef
-            color += int_reflection * transparency_koef
+            color += fresnel * (ext_reflection * reflection_koef)
+            color += (1-fresnel) * int_reflection * transparency_koef
 
             #color = sphere_pos
 

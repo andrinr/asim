@@ -10,7 +10,7 @@ class Sphere(tr.Object):
         super().__init__(position)
         self.radius = radius
 
-    def intersect(self, rays : tr.Rays, horizon : float = 2^10, tolerance : float = 1e-5):
+    def intersect(self, rays : tr.Rays, horizon : float = 2^10, tolerance : float = 1e-2):
         a = torch.sum(rays.direction ** 2, dim=1)
         ray_to_sphere = torch.subtract(rays.origin, self.position)
         b = 2 * torch.sum(ray_to_sphere * rays.direction, dim=1)
