@@ -127,34 +127,39 @@ class Tracer:
         color += (1-transparency_koef) * diffuse_koef * base_color * angle_light_normal * shadow
         color += (1-transparency_koef) * specular_koef * self.light.color * halfway_angle ** shininess_koef * shadow
 
-        if torch.sum(reflection_koef) == 0 and torch.sum(transparency_koef) == 0:
-            return color
-
         if recursion_depth + 1 < self.max_recursion_depth:
             
-            dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
+            if torch.sum(reflection_koef) > 0:
+                dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
 
-            ext_refl_direction = normalize(rays.direction - 2 * dot_prod * normal)
-            # same refraction index as the ray does not enter the sphere
-            ext_refl_rays = tr.Rays(new_origin, ext_refl_direction, rays.n, rays.m)
-            entering = torch.sum(normal * rays.direction, dim=1, keepdim=True) < 0
-            # for the refraction formula:
-            # https://registry.khronos.org/OpenGL-Refpages/gl4/html/refract.xhtml
-            n1 = torch.where(entering, self.air_refraction_index, refraction_koef)
-            n2 = torch.where(entering, refraction_koef, self.air_refraction_index)
-            n = n1 / n2;
-            k = 1. - n ** 2 * (1 - dot_prod ** 2)
-            
-            int_refl_direction = torch.where(
-                k < 0, 
-                torch.zeros(nm, 3), 
-                normalize(n * rays.direction + (n * dot_prod - torch.sqrt(k)) * normal)
-            )
+                ext_refl_direction = normalize(rays.direction - 2 * dot_prod * normal)
+                # same refraction index as the ray does not enter the sphere
+                ext_refl_rays = tr.Rays(new_origin, ext_refl_direction, rays.n, rays.m)
+                ext_reflection = self.trace(ext_refl_rays, recursion_depth + 1, False)
+                
+                color += ext_reflection * reflection_koef
 
-            int_refl_rays = tr.Rays(new_origin, int_refl_direction, rays.n, rays.m)
-            
-            ext_reflection = self.trace(ext_refl_rays, recursion_depth + 1, False)
-            int_reflection = self.trace(int_refl_rays, recursion_depth + 1, False)
+            if torch.sum(transparency_koef) > 0:
+                dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
+
+                entering = torch.sum(normal * rays.direction, dim=1, keepdim=True) < 0
+                # for the refraction formula:
+                # https://registry.khronos.org/OpenGL-Refpages/gl4/html/refract.xhtml
+                n1 = torch.where(entering, self.air_refraction_index, refraction_koef)
+                n2 = torch.where(entering, refraction_koef, self.air_refraction_index)
+                n = n1 / n2;
+                k = 1. - n ** 2 * (1 - dot_prod ** 2)
+                
+                int_refl_direction = torch.where(
+                    k < 0, 
+                    torch.zeros(nm, 3), 
+                    normalize(n * rays.direction + (n * dot_prod - torch.sqrt(k)) * normal)
+                )
+
+                int_refl_rays = tr.Rays(new_origin, int_refl_direction, rays.n, rays.m)
+                
+                int_reflection = self.trace(int_refl_rays, recursion_depth + 1, False)
+                color += int_reflection * transparency_koef
 
             # Fresnel
             # https://en.wikipedia.org/wiki/Schlick%27s_approximation
@@ -168,8 +173,6 @@ class Tracer:
             #color += fresnel * (ext_reflection * reflection_koef)
             #color += (1-fresnel) * int_reflection * transparency_koef
 
-            color += ext_reflection * reflection_koef
-            color += int_reflection * transparency_koef
             #color = sphere_pos
 
             #color = torch.max(fresnel * ext_reflection * reflection_koef, color)

@@ -29,7 +29,7 @@ def create_scene_1():
         shininess=2.0,
         refractive_index=1.2,
         reflection=1.0,
-        transparency=0.1)
+        transparency=0)
 
     sphere_1 = tr.Sphere(
         position=[0, 0, 2.0],
