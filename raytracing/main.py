@@ -13,7 +13,7 @@ rays_grid = tr.RaysGrid.create(
     resolution=(256, 256),
     distance=1.0)
 
-tracer = tr.Tracer(meshes=meshes, light=light, ambient=[1.0, 1.0, 1.0], max_recursion_depth=3)
+tracer = tr.Tracer(meshes=meshes, light=light, ambient=[1.0, 1.0, 1.0], max_recursion_depth=4)
 image = tracer(rays_grid)
 image = image.cpu().numpy()
 

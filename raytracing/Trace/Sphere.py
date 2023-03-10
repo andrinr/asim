@@ -18,6 +18,9 @@ class Sphere(tr.Object):
         c = torch.sum(ray_to_sphere ** 2, dim=1) - self.radius ** 2
         disc = b ** 2 - 4 * a * c
         mask = disc >= 0
+        if torch.sum(mask) == 0:
+            return torch.full((rays.n * rays.m, 1), horizon + 1)
+        
         mask = mask.unsqueeze(1)
         
         q = -(b + torch.sign(b) * torch.sqrt(disc)) / 2
