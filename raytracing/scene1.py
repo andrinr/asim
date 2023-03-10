@@ -44,7 +44,7 @@ def create_scene_1():
         radius=0.3)
 
     polygon_object = tr.PolygonObject(
-        position=[-1.0, -2.0, 2.0],
+        position=[-1.0, -1.0, 2.0],
         vertices=[
             [-0.5, -0.5, 0.0],
             [0.5, -0.5, 0.0],
@@ -52,7 +52,8 @@ def create_scene_1():
         ],
         faces=[
             [0, 1, 2]
-        ])
+        ],
+        scale=0.4)
 
     meshes : list[tr.Mesh] = []
     meshes.append(tr.Mesh(

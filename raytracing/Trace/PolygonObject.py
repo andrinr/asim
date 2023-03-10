@@ -5,6 +5,7 @@ class PolygonObject(tr.Object):
     def __init__(
             self, 
             position : list, 
+            scale : float,
             vertices : list,
             faces : list
     ):
@@ -12,6 +13,7 @@ class PolygonObject(tr.Object):
         self.vertices = []
         self.vertices = torch.tensor(vertices, dtype=torch.float32)
         self.faces = torch.tensor(faces, dtype=torch.int32)
+        self.scale = scale
 
     def intersect(self, rays : tr.Rays, horizon : float = 2^20, tolerance : float = 1e-6):
 
@@ -19,14 +21,11 @@ class PolygonObject(tr.Object):
         t = torch.full((nm, 1), horizon)
 
         for face in self.faces:
-            v0 = self.vertices[face[0]] + self.position
-            v1 = self.vertices[face[1]] + self.position
-            v2 = self.vertices[face[2]] + self.position
+            v0 = self.vertices[face[0]] * self.scale + self.position
+            v1 = self.vertices[face[1]] * self.scale + self.position
+            v2 = self.vertices[face[2]] * self.scale + self.position
 
-            e1 = v1 - v0
-            e2 = v2 - v0
-
-            normal = torch.cross(e1, e2)
+            normal = torch.cross((v1 - v0), (v2 - v0))
             divisor = torch.sum(rays.direction * (v0 - rays.origin), axis=1)
             dividend = torch.sum(normal * (rays.direction), axis=1)
             mask = torch.abs(divisor) == 0
@@ -36,7 +35,7 @@ class PolygonObject(tr.Object):
                 horizon + 1, 
                 torch.div(dividend, divisor))
             t_0 = t_0.unsqueeze(1)
-            
+
             # check plane intersection
 
             index = torch.argmax(normal)
@@ -58,15 +57,15 @@ class PolygonObject(tr.Object):
             mask = (area0 >= 0) & (area1 >= 0) & (area2 >= 0)
             t_0 = t_0.squeeze()
            
-            t0 = torch.where(
+            t_0 = torch.where(
                 mask,
                 horizon + 1,
-                t_0
+                t_0,
             )
 
-            t0 = t0.unsqueeze(1)
+            t_0 = t_0.unsqueeze(1)
 
-            t = torch.min(t, t0)
+            t = torch.min(t, t_0)
         
         
         return t
