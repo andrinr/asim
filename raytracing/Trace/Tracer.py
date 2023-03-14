@@ -178,7 +178,7 @@ class Tracer:
             #color = torch.max(fresnel * ext_reflection * reflection_koef, color)
             #color = torch.max((1-fresnel) * int_reflection * transparency_koef, color)
 
-        color = t_0 * torch.tensor([1.0, 1.0, 1.0]) * 0.1
+        #color = t_0 * torch.tensor([1.0, 1.0, 1.0]) * 0.1
         color[~update] = torch.tensor([0, 0, 0], dtype=torch.float32) 
 
         return color

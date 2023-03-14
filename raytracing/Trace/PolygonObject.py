@@ -26,8 +26,14 @@ class PolygonObject(tr.Object):
             v2 = self.vertices[face[2]] * self.scale + self.position
 
             normal = torch.cross((v1 - v0), (v2 - v0))
-            divisor = torch.sum(rays.direction * (v0 - rays.origin), axis=1)
-            dividend = torch.sum(normal * (rays.direction), axis=1)
+            normal = normal / torch.norm(normal)
+            print((normal * rays.direction).shape)
+            normal = torch.where(torch.sum(normal * rays.direction, axis=1) > 0, normal * -1, normal)
+            print(normal)
+            D = torch.sum(-normal * (v0), axis=1)
+            
+            divisor = -torch.sum(normal * rays.origin, axis=1) - D
+            dividend = torch.sum(normal * rays.direction, axis=1)
             mask = torch.abs(divisor) == 0
 
             t_0 = torch.where(
@@ -39,34 +45,32 @@ class PolygonObject(tr.Object):
             # check plane intersection
 
             index = torch.argmax(normal)
-            mask = torch.tensor([True, True, True])
-            mask[index] = False
+            normal = torch.abs(normal)
 
-            v0_2d = v0[mask]
-            v1_2d = v1[mask]
-            v2_2d = v2[mask]
+            v0[index] = 0
+            v1[index] = 0
+            v2[index] = 0
 
-            point_3d = rays.origin + t_0 * rays.direction
-            point_2d = point_3d[:,mask]
+            point = rays.origin + t_0 * rays.direction
+            point[:, index] = 0
 
             # check if point is inside triangle
-            area0 = torch.sum((v0_2d - point_2d) * (v2_2d - point_2d), axis=1)
-            area1 = torch.sum((v1_2d - point_2d) * (v0_2d - point_2d), axis=1)
-            area2 = torch.sum((v2_2d - point_2d) * (v1_2d - point_2d), axis=1)
+            area0 = torch.sum(torch.cross((v0 - point), (v2 - point)), axis=1)
+            area1 = torch.sum(torch.cross((v1 - point), (v0 - point)), axis=1)
+            area2 = torch.sum(torch.cross((v2 - point), (v1 - point)), axis=1)
 
             mask = (area0 >= 0) & (area1 >= 0) & (area2 >= 0)
+            mask = mask | (area0 <= 0) & (area1 <= 0) & (area2 <= 0)
             t_0 = t_0.squeeze()
            
             t_0 = torch.where(
                 mask,
-                horizon + 1,
-                t_0,
+                t_0, 
+                horizon + 1
             )
 
             t_0 = t_0.unsqueeze(1)
 
             t = torch.min(t, t_0)
         
-        
         return t
-

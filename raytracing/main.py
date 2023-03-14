@@ -10,7 +10,7 @@ rays_grid = tr.RaysGrid.create(
     bottom_left=(-1, -1),
     top_right=(1, 1),
     grid_size=(8, 8),
-    resolution=(128, 128),
+    resolution=(256, 256),
     distance=1.0)
 
 tracer = tr.Tracer(meshes=meshes, light=light, ambient=[1.0, 1.0, 1.0], max_recursion_depth=4)
