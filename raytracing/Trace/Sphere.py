@@ -20,7 +20,7 @@ class Sphere(tr.Object):
         mask = disc >= 0
         
         if torch.sum(mask) == 0:
-            return torch.full((rays.n * rays.m, 1), horizon + 1)
+            return torch.full((rays.n * rays.m, 1), horizon + 1), torch.zeros((rays.n * rays.m, 3))
         
         mask = mask.unsqueeze(1)
         
@@ -31,4 +31,6 @@ class Sphere(tr.Object):
         t_1[(t_1 < 0) | ~mask] = horizon + 1
         t_0 = torch.min(t_0, t_1)
 
-        return t_0
+        normals = (rays.origin + t_0 * rays.direction - self.position) / self.radius
+
+        return t_0, normals

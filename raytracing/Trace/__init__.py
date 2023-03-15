@@ -4,6 +4,6 @@ from .Object import Object
 from .Material import Material
 from .Mesh import Mesh
 from .Sphere import Sphere
-from .PolygonObject import PolygonObject
+from .PolygonObject import Polygon
 from .Light import Light
 from .Tracer import Tracer

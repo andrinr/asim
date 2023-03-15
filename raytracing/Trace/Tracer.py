@@ -42,6 +42,7 @@ class Tracer:
     
         n_meshes = len(self.meshes)
         material_id = torch.full((nm, 1), 0)
+        normals = torch.zeros((nm, 3), dtype=torch.float32)
         
         ambient_koef = torch.zeros(n_meshes, dtype=torch.float32)
         diffuse_koef = torch.zeros(n_meshes, dtype=torch.float32) 
@@ -54,9 +55,10 @@ class Tracer:
         positions = torch.zeros((3, n_meshes), dtype=torch.float32) 
    
         for index, mesh in enumerate(self.meshes):
-            t_0 = mesh.object.intersect(rays, self.horizon)
+            t_0, normals = mesh.object.intersect(rays, self.horizon)
             t = torch.min(t, t_0)
             material_id[t_0 == t] = index
+            normals[t_0 == t] = normals[t_0 == t]
 
             positions[:,index] = mesh.object.position
             # store material koeficients
@@ -68,6 +70,7 @@ class Tracer:
             colors[:,index] = mesh.material.color
             transparency_koef[index] = mesh.material.transparency
             reflection_koef[index] = mesh.material.reflection
+            
 
         update = t < self.horizon
         update = update.squeeze()
@@ -106,7 +109,6 @@ class Tracer:
 
         new_origin = torch.mul(t, rays.direction) + rays.origin
         normal = normalize(torch.sub(new_origin, sphere_pos))
-        new_origin += 0.001 * normal
         light = normalize(self.light.position - new_origin)
         halfway = normalize(torch.add(light, -rays.direction))
      
@@ -117,7 +119,7 @@ class Tracer:
         torch.clamp(halfway_angle, min=0, out=halfway_angle)
 
         shadow_ray_direction = normalize(self.light.position - new_origin)
-        shadow_rays = tr.Rays(new_origin, shadow_ray_direction, rays.n, rays.m)
+        shadow_rays = tr.Rays(new_origin + 0.001 * normal, shadow_ray_direction, rays.n, rays.m)
         shadow = self.trace(shadow_rays, 0, True)
         shadow = shadow.unsqueeze(-1)
         shadow = ~shadow
@@ -134,7 +136,7 @@ class Tracer:
 
                 ext_refl_direction = normalize(rays.direction - 2 * dot_prod * normal)
                 # same refraction index as the ray does not enter the sphere
-                ext_refl_rays = tr.Rays(new_origin, ext_refl_direction, rays.n, rays.m)
+                ext_refl_rays = tr.Rays(new_origin + 0.001 * normal, ext_refl_direction, rays.n, rays.m)
                 ext_reflection = self.trace(ext_refl_rays, recursion_depth + 1, False)
                 
                 color += ext_reflection * reflection_koef

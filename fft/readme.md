@@ -53,3 +53,8 @@ The sampling theorem states that a signal can be perfectly reconstructed from it
 The fast furier transform (FFT) is an algorithm to compute the DFT. It is based on the fact that the DFT can be written as a product of two matrices. The first matrix is a diagonal matrix with the values $e^{-2\pi i \frac{kn}{N}}$ and the second matrix is a diagonal matrix with the values $h(n)$.
 
 Given a vector $y$
+
+
+- N^2 method
+- NlogN recursive method
+- NlogN 
