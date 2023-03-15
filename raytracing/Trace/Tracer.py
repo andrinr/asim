@@ -52,15 +52,19 @@ class Tracer:
         transparency_koef = torch.zeros(n_meshes, dtype=torch.float32) 
         reflection_koef = torch.zeros(n_meshes, dtype=torch.float32) 
         colors = torch.zeros((3, n_meshes), dtype=torch.float32) 
-        positions = torch.zeros((3, n_meshes), dtype=torch.float32) 
    
         for index, mesh in enumerate(self.meshes):
-            t_0, normals = mesh.object.intersect(rays, self.horizon)
+            t_0, normals_ = mesh.object.intersect(rays, self.horizon)
             t = torch.min(t, t_0)
             material_id[t_0 == t] = index
-            normals[t_0 == t] = normals[t_0 == t]
+            t = t.squeeze()
+            t_0 = t_0.squeeze()
 
-            positions[:,index] = mesh.object.position
+            normals[t_0 == t, :] = normals_[t_0 == t, :]
+
+            t = t.unsqueeze(1)
+            t_0 = t_0.unsqueeze(1)
+
             # store material koeficients
             ambient_koef[index] = mesh.material.ambient
             diffuse_koef[index] = mesh.material.diffuse
@@ -70,7 +74,6 @@ class Tracer:
             colors[:,index] = mesh.material.color
             transparency_koef[index] = mesh.material.transparency
             reflection_koef[index] = mesh.material.reflection
-            
 
         update = t < self.horizon
         update = update.squeeze()
@@ -101,50 +104,46 @@ class Tracer:
         colors = colors.expand(nm, -1, -1)
         base_color = torch.matmul(colors, material_id)
         base_color = base_color.squeeze()
-        
-        positions = positions.view(1, 3, n_meshes)
-        positions = positions.expand(nm, -1, -1)
-        sphere_pos = torch.matmul(positions, material_id)
-        sphere_pos = sphere_pos.squeeze()
-
+    
         new_origin = torch.mul(t, rays.direction) + rays.origin
-        normal = normalize(torch.sub(new_origin, sphere_pos))
+        print("new origin: ", new_origin)
         light = normalize(self.light.position - new_origin)
         halfway = normalize(torch.add(light, -rays.direction))
      
-        angle_light_normal = torch.sum(normal * light, dim=1, keepdim=True)
+        angle_light_normal = torch.sum(normals * light, dim=1, keepdim=True)
         torch.clamp(angle_light_normal, min=0, out=angle_light_normal)
 
-        halfway_angle = torch.sum(normal * halfway, dim=1, keepdim=True)
+        halfway_angle = torch.sum(normals * halfway, dim=1, keepdim=True)
         torch.clamp(halfway_angle, min=0, out=halfway_angle)
 
         shadow_ray_direction = normalize(self.light.position - new_origin)
-        shadow_rays = tr.Rays(new_origin + 0.001 * normal, shadow_ray_direction, rays.n, rays.m)
+        shadow_rays = tr.Rays(new_origin + 0.001 * normals, shadow_ray_direction, rays.n, rays.m)
         shadow = self.trace(shadow_rays, 0, True)
         shadow = shadow.unsqueeze(-1)
         shadow = ~shadow
 
         # Blinn Phong: ambient, diffuse, specular
         color = (1-transparency_koef) * self.ambient * ambient_koef
-        color += (1-transparency_koef) * diffuse_koef * base_color * angle_light_normal * shadow
-        color += (1-transparency_koef) * specular_koef * self.light.color * halfway_angle ** shininess_koef * shadow
+        color += (1-transparency_koef) * diffuse_koef * base_color * angle_light_normal# * shadow
+        color += (1-transparency_koef) * specular_koef * self.light.color * halfway_angle ** shininess_koef# * shadow
 
+        print("normals", normals)
         if recursion_depth + 1 < self.max_recursion_depth:
             
             if torch.sum(reflection_koef) > 0:
-                dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
+                dot_prod = torch.sum(normals * rays.direction, dim=1, keepdim=True)
 
-                ext_refl_direction = normalize(rays.direction - 2 * dot_prod * normal)
+                ext_refl_direction = normalize(rays.direction - 2 * dot_prod * normals)
                 # same refraction index as the ray does not enter the sphere
-                ext_refl_rays = tr.Rays(new_origin + 0.001 * normal, ext_refl_direction, rays.n, rays.m)
+                ext_refl_rays = tr.Rays(new_origin + 0.001 * normals, ext_refl_direction, rays.n, rays.m)
                 ext_reflection = self.trace(ext_refl_rays, recursion_depth + 1, False)
                 
                 color += ext_reflection * reflection_koef
 
             if torch.sum(transparency_koef) > 0:
-                dot_prod = torch.sum(normal * rays.direction, dim=1, keepdim=True)
+                dot_prod = torch.sum(normals * rays.direction, dim=1, keepdim=True)
 
-                entering = torch.sum(normal * rays.direction, dim=1, keepdim=True) < 0
+                entering = torch.sum(normals * rays.direction, dim=1, keepdim=True) < 0
                 # for the refraction formula:
                 # https://registry.khronos.org/OpenGL-Refpages/gl4/html/refract.xhtml
                 n1 = torch.where(entering, self.air_refraction_index, refraction_koef)
@@ -155,9 +154,10 @@ class Tracer:
                 int_refl_direction = torch.where(
                     k < 0, 
                     torch.zeros(nm, 3), 
-                    normalize(n * rays.direction + (n * dot_prod - torch.sqrt(k)) * normal)
+                    normalize(n * rays.direction + (n * dot_prod - torch.sqrt(k)) * normals)
                 )
 
+                # fix origin offset
                 int_refl_rays = tr.Rays(new_origin, int_refl_direction, rays.n, rays.m)
                 
                 int_reflection = self.trace(int_refl_rays, recursion_depth + 1, False)

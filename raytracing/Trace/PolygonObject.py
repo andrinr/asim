@@ -24,7 +24,6 @@ class Polygon(tr.Object):
     def intersect(self, rays : tr.Rays, horizon : float = 2^20, tolerance : float = 1e-6):
 
         nm = rays.n * rays.m
-        t = torch.full((nm, 1), horizon)
 
         v0 = self.vertices[self.faces[0]] * self.scale + self.position
         v1 = self.vertices[self.faces[1]] * self.scale + self.position
@@ -42,12 +41,12 @@ class Polygon(tr.Object):
         
         divisor = -torch.sum(normals * rays.origin, axis=1) - D
         dividend = torch.sum(normals * rays.direction, axis=1)
-        mask = torch.abs(divisor) == 0
+        mask = torch.abs(dividend) == 0
 
         t_0 = torch.where(
             mask, 
             horizon + 1, 
-            torch.div(dividend, divisor))
+            torch.div(divisor, dividend))
         t_0 = t_0.unsqueeze(1)
 
         # check plane intersection
@@ -68,6 +67,7 @@ class Polygon(tr.Object):
         v2[mask] = 0
 
         point = rays.origin + t_0 * rays.direction
+        print("point", point)
         point[mask] = 0
 
         # check if point is inside triangle
@@ -86,5 +86,7 @@ class Polygon(tr.Object):
         )
 
         t_0 = t_0.unsqueeze(1)
+
+        print("t_0", t_0)
 
         return t_0, normals
