@@ -8,7 +8,7 @@ def create_scene_1():
         ambient=0.1,
         shininess=30.0,
         refractive_index=1.2,
-        reflection=0.0,
+        reflection=1.0,
         transparency=0.0)
 
     mat_2 = tr.Material(
@@ -44,13 +44,24 @@ def create_scene_1():
         radius=0.3)
 
     polygon_object = tr.Polygon(
-        position=[-0.5, -0.3, 1.5],
+        position=[-0.5, -0.3, 2.5],
         vertices=[
-            [-0.5, -0.5, 0.0],
-            [0.5, -0.5, 0.0],
-            [0.5, 0.5, 0.0]
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5]
         ],
-        faces=[0, 1, 2],
+        faces=[[0, 1, 2], [0, 2, 3],
+            [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 4, 5],
+            [1, 2, 6], [1, 5, 6],
+            [2, 3, 7], [2, 6, 7],
+            [3, 0, 4], [3, 4, 7]
+        ],
         scale=1.0)
 
     meshes : list[tr.Mesh] = []
@@ -65,14 +76,14 @@ def create_scene_1():
     meshes.append(tr.Mesh(
         object=sphere_3,
         material=mat_3))
-
-    meshes.append(tr.Mesh(
-        object=polygon_object,
-        material=mat_1))
     
     light = tr.Light(
         position=[-1.5, 2.0, 0.5], 
         color=[1, 1, 1],
         intensity=1.0)
+
+    meshes.append(tr.Mesh(
+        object=polygon_object,
+        material=mat_1))
     
     return meshes, light

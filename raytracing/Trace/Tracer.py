@@ -106,7 +106,6 @@ class Tracer:
         base_color = base_color.squeeze()
     
         new_origin = torch.mul(t, rays.direction) + rays.origin
-        print("new origin: ", new_origin)
         light = normalize(self.light.position - new_origin)
         halfway = normalize(torch.add(light, -rays.direction))
      
@@ -117,17 +116,16 @@ class Tracer:
         torch.clamp(halfway_angle, min=0, out=halfway_angle)
 
         shadow_ray_direction = normalize(self.light.position - new_origin)
-        shadow_rays = tr.Rays(new_origin + 0.001 * normals, shadow_ray_direction, rays.n, rays.m)
+        shadow_rays = tr.Rays(new_origin + 0.0001 * normals, shadow_ray_direction, rays.n, rays.m)
         shadow = self.trace(shadow_rays, 0, True)
         shadow = shadow.unsqueeze(-1)
         shadow = ~shadow
 
         # Blinn Phong: ambient, diffuse, specular
         color = (1-transparency_koef) * self.ambient * ambient_koef
-        color += (1-transparency_koef) * diffuse_koef * base_color * angle_light_normal# * shadow
-        color += (1-transparency_koef) * specular_koef * self.light.color * halfway_angle ** shininess_koef# * shadow
+        color += (1-transparency_koef) * diffuse_koef * base_color * angle_light_normal * shadow
+        color += (1-transparency_koef) * specular_koef * self.light.color * halfway_angle ** shininess_koef * shadow
 
-        print("normals", normals)
         if recursion_depth + 1 < self.max_recursion_depth:
             
             if torch.sum(reflection_koef) > 0:
@@ -138,7 +136,7 @@ class Tracer:
                 ext_refl_rays = tr.Rays(new_origin + 0.001 * normals, ext_refl_direction, rays.n, rays.m)
                 ext_reflection = self.trace(ext_refl_rays, recursion_depth + 1, False)
                 
-                color += ext_reflection * reflection_koef
+                color = torch.max(ext_reflection * reflection_koef, color)
 
             if torch.sum(transparency_koef) > 0:
                 dot_prod = torch.sum(normals * rays.direction, dim=1, keepdim=True)
@@ -161,7 +159,7 @@ class Tracer:
                 int_refl_rays = tr.Rays(new_origin, int_refl_direction, rays.n, rays.m)
                 
                 int_reflection = self.trace(int_refl_rays, recursion_depth + 1, False)
-                color += int_reflection * transparency_koef
+                color = torch.max(color, int_reflection * transparency_koef)
 
             # Fresnel
             # https://en.wikipedia.org/wiki/Schlick%27s_approximation
@@ -181,6 +179,7 @@ class Tracer:
             #color = torch.max((1-fresnel) * int_reflection * transparency_koef, color)
 
         #color = t_0 * torch.tensor([1.0, 1.0, 1.0]) * 0.1
+        #color = normals * 0.5 + 0.5
         color[~update] = torch.tensor([0, 0, 0], dtype=torch.float32) 
 
         return color
