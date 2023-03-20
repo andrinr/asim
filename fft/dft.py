@@ -39,38 +39,6 @@ def RFFT(x):
              X_even+factor[int(N/2):]*X_odd])
         return X
     
-def DFFT(x):
-    N = len(x)
-    
-    memory = np.zeros(2, N)
-    memory[0] = x
-
-    clock = 0
-    size = 2
-    while size < N:
-        read = memory[clock % 2]
-        write = memory[(clock + 1) % 2]
-        n_segments = int(N/size)
-
-        for offset in range(0, size, 2):
-            n = np.arange(segment_size)
-
-            factor = np.exp(-2j*np.pi*n/ segment_size)
-            even = read[offset::size]
-            odd = read[offset+1::size]
-
-            write[offset]
-            
-            X = np.concatenate(\
-                [even+factor[:int(N/2)]*odd,
-                even+factor[int(N/2):]*odd])
-            return X
-        
-        size *= 2
-        clock += 1
-
-    
-    
 def DFT(signal, optimization_level=0):
     """
     Discrete Fourier Transform
@@ -83,9 +51,6 @@ def DFT(signal, optimization_level=0):
 
     elif optimization_level == 1:
         frequency = RFFT(signal)
-
-    elif optimization_level == 2:
-        frequency = DFFT(signal)
 
     end = time.perf_counter()
     return frequency, end - start
