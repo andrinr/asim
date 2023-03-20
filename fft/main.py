@@ -18,7 +18,7 @@ freq = 7
 x += 0.5* np.sin(2*np.pi*freq*t)
 
 fig, axs = plt.subplots(3, 1)
-plt.tight_layout()
+plt.tight_layout(pad=0.8)
 axs[0].plot(t, x, 'r')
 axs[0].set_ylabel('Amplitude')
 axs[0].set_xlabel('Time (s)')
@@ -44,4 +44,5 @@ axs[1].set_ylabel('DFT Amplitude |X(freq)|')
 
 axs[2].bar(np.arange(0, 2), times, 0.5, color='g')
 
+plt.savefig('dft.png')
 plt.show()
