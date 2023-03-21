@@ -20,6 +20,20 @@ def NDFT(x):
     
     return X, end - start
 
+def NDFT_2d(x):
+    """
+    Naive DFT 2D
+    """
+    N = len(x)
+    n = np.arange(N)
+    k = n.reshape((N, 1))
+    e = np.exp(-2j * np.pi * k * n / N)
+    
+    X = np.dot(e, x)
+    X = np.dot(X, e.T)
+    
+    return X
+
 def RFFT(x):
     """
     Fast Fourier Transform, recursive
@@ -39,18 +53,23 @@ def RFFT(x):
              X_even+factor[int(N/2):]*X_odd])
         return X
     
-def DFT(signal, optimization_level=0):
+
+    
+def DFT(signal, optimization_level=1):
     """
     Discrete Fourier Transform
     """
     start = time.perf_counter()
     frequency = np.zeros(len(signal))
 
-    if optimization_level == 0:
+    if optimization_level == 0 and signal.ndim == 1:
         frequency = NDFT(signal)
 
-    elif optimization_level == 1:
+    elif optimization_level == 1 and signal.ndim == 1:
         frequency = RFFT(signal)
+
+    elif optimization_level == 0 and signal.ndim == 2:
+        frequency = NDFT_2d(signal)
 
     end = time.perf_counter()
     return frequency, end - start

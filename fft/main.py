@@ -34,10 +34,11 @@ N = len(X)
 n = np.arange(N)
 T = N/sr
 freq = n/T 
-
-axs[1].stem(freq[0:int(N/2)], abs(X[0:int(N/2)]), 'b', \
+nyquist = int(N/2)
+print(X)
+axs[1].stem(freq[0:nyquist], 1/N * np.abs(X[0:nyquist]), 'b', \
          markerfmt=" ", basefmt="-b")
-axs[1].set_title('DFT (slow)')
+axs[1].set_title('DFT')
 axs[1].set_xscale('log')
 axs[1].set_xlabel('Freq (Hz)')
 axs[1].set_ylabel('DFT Amplitude |X(freq)|')
