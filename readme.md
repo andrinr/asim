@@ -3,5 +3,8 @@
 A pytorch based raytracer with optimization for sparse scenes:
 ![teapot](raytracing/teapot.png)
 
-DFT and FFT implementation:
+DFT and FFT implementation:  
 ![dft](fft/fft.png)
+
+2 FFT implementations:  
+![fft](fft/fft2d.png)
