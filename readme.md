@@ -6,5 +6,8 @@ A pytorch based raytracer with optimization for sparse scenes:
 DFT and FFT implementation:  
 ![dft](fft/fft.png)
 
-2 FFT implementations:  
+2D FFT implementations:  
 ![fft](fft/fft2d.png)
+
+Solving for potential using 2D FFT and Poisson equation:
+![poisson](fft/potential.png)
