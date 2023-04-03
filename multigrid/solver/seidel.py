@@ -3,7 +3,7 @@ import solver
 
 class Seidel(solver.Solver):
         
-    def __init__(self, A : np.ndarray, b : np.ndarray, max_iterations : int = 16):
+    def __init__(self, A : np.ndarray, b : np.ndarray, max_iterations : int = 256):
         super().__init__(A, b, max_iterations)
         
     def solve(self):
@@ -17,5 +17,7 @@ class Seidel(solver.Solver):
 
         for i in range(self.max_iterations):
             x = T @ x + C
+            if self.check_convergence(x):
+                break
 
         return x
