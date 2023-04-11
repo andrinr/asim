@@ -6,7 +6,7 @@ class Seidel(solver.Solver):
         
     def __init__(self, A : np.ndarray, b : np.ndarray, max_iterations : int = 256):
         super().__init__(A, b, max_iterations)
-        
+
     def solve(self):
         L = np.tril(self.A, 0)
         L_inv = solve_triangular(L, np.identity(L.shape[0]), lower=True)
