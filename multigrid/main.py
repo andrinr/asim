@@ -36,5 +36,7 @@ def sample_galaxy(rate = 256, n_galaxies = 20, n_particles_per_galaxy=2000, seed
 
     return grid
 
-galaxy = sample_galaxy()
+galaxy = sample_galaxy(rate=20)
 A = build_A(galaxy.shape[0])
+
+print(A)

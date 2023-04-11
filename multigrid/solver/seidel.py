@@ -1,5 +1,6 @@
 import numpy as np
 import solver
+from scipy.linalg import solve_triangular
 
 class Seidel(solver.Solver):
         
@@ -8,7 +9,7 @@ class Seidel(solver.Solver):
         
     def solve(self):
         L = np.tril(self.A, 0)
-        L_inv = np.linalg.inv(L)
+        L_inv = solve_triangular(L, np.identity(L.shape[0]), lower=True)
         U = np.triu(self.A, 1)
         x = np.zeros(self.b.shape)
 
