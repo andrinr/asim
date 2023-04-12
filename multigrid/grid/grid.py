@@ -72,18 +72,10 @@ class Multigrid:
 
     def interpolate(self, x : np.ndarray) -> np.ndarray:
         x_res = np.zeros((2 * x.shape[0], 2 * x.shape[1]))
-        x_sparse = np.zeros((x.shape[0] * 2, x.shape[1] * 2))
+        x_sparse = np.zeros((2 * x.shape[0], 2 * x.shape[1]))
 
         x_sparse[::2, ::2] = x
-
-        x_res += np.roll(x_sparse, (-1, -1,)) * self.project_kernel[0, 0]
-        x_res += np.roll(x_sparse, (-1, 0,)) * self.project_kernel[0, 1]
-        x_res += np.roll(x_sparse, (-1, 1,)) * self.project_kernel[0, 2]
-        x_res += np.roll(x_sparse, (0, -1,)) * self.project_kernel[1, 0]
-        x_res += np.roll(x_sparse, (0, 1,)) * self.project_kernel[1, 2]
-        x_res += np.roll(x_sparse, (1, -1,)) * self.project_kernel[2, 0]
-        x_res += np.roll(x_sparse, (1, 0,)) * self.project_kernel[2, 1]
-        x_res += np.roll(x_sparse, (1, 1,)) * self.project_kernel[2, 2]
+        x_res = convolve(x_sparse, self.project_kernel, mode="constant")
 
         x_res[::2, ::2] = x * self.project_kernel[1, 1]
         
