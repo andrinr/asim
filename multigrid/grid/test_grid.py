@@ -9,7 +9,7 @@ def test_interpolation():
 
     grid = Multigrid(
         stencil=stencil, 
-        phi=x, 
+        b=x, 
         restrict_kernel=restrict_kernel, 
         project_kernel=project_kernel, 
         schema="rrrppp")
