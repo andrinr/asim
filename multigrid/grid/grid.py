@@ -1,6 +1,8 @@
 import numpy as np
 import solver
 from scipy.ndimage import convolve
+from scipy.interpolate import RegularGridInterpolator
+from grid import grid_points
 
 class Multigrid:
 
@@ -35,10 +37,10 @@ class Multigrid:
         for map in self.schema:
             if map == "r":
                 d = self.restrict(d)
-                eps = 
+                eps = None
                 self.relax
             elif map == "p":
-                x = self.prolongate(x)
+                x = self.interpolate(x)
         
         return x
     
@@ -50,7 +52,7 @@ class Multigrid:
             d = self.defect(self.stencil, self.phi, x)
             d = self.restrict(d)
             x = self.recurse(x, depth + 1)
-            x = self.prolongate(x)
+            x = self.interpolate(x)
             x = self.relax(x, self.pre_smoothing_steps)
             return x
     
@@ -67,8 +69,25 @@ class Multigrid:
     def restrict(self, x : np.ndarray) -> np.ndarray:
         convolve(x, self.restrict_kernel, mode="constant")[::2, ::2]
 
-    def prolongate(self, x : np.ndarray) -> np.ndarray:
-        convolve(x, self.project_kernel, mode="constant")
+
+    def interpolate(self, x : np.ndarray) -> np.ndarray:
+        x_res = np.zeros((2 * x.shape[0], 2 * x.shape[1]))
+        x_sparse = np.zeros((x.shape[0] * 2, x.shape[1] * 2))
+
+        x_sparse[::2, ::2] = x
+
+        x_res += np.roll(x_sparse, (-1, -1,)) * self.project_kernel[0, 0]
+        x_res += np.roll(x_sparse, (-1, 0,)) * self.project_kernel[0, 1]
+        x_res += np.roll(x_sparse, (-1, 1,)) * self.project_kernel[0, 2]
+        x_res += np.roll(x_sparse, (0, -1,)) * self.project_kernel[1, 0]
+        x_res += np.roll(x_sparse, (0, 1,)) * self.project_kernel[1, 2]
+        x_res += np.roll(x_sparse, (1, -1,)) * self.project_kernel[2, 0]
+        x_res += np.roll(x_sparse, (1, 0,)) * self.project_kernel[2, 1]
+        x_res += np.roll(x_sparse, (1, 1,)) * self.project_kernel[2, 2]
+
+        x_res[::2, ::2] = x * self.project_kernel[1, 1]
+        
+        return x_res
     
     def parse_schema(self, schema : str) -> int:
         self.schema = [char for char in schema]

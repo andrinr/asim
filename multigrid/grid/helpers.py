@@ -21,3 +21,18 @@ def sample_galaxy(rate = 256, n_galaxies = 20, n_particles_per_galaxy=2000, seed
         grid[x, y] += 1
 
     return grid
+
+def grid_points(n : int, m : int, sort : bool = False) -> np.ndarray:
+    in_x = np.linspace(0, n, n + 1)
+    in_y = np.linspace(0, m, m + 1)
+    in_x, in_y = np.meshgrid(in_x, in_y)
+    in_x = in_x.flatten()
+    in_y = in_y.flatten()
+
+    if sort:
+        sort_ind = np.argsort(in_x)
+
+        in_x = in_x[sort_ind]
+        in_y = in_y[sort_ind]
+
+    return in_x, in_y
