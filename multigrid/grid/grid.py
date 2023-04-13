@@ -12,10 +12,12 @@ class Multigrid:
             restrict_kernel : np.ndarray,
             project_kernel : np.ndarray,
             schema : str = "rrpp",
-            smoothing_steps : int = 16):
+            approximation_steps : int = 16,
+            exact_steps : int = 128):
         self.stencil = stencil
         self.b = b
-        self.smoothing_steps = smoothing_steps
+        self.approx_steps = approximation_steps
+        self.exact_steps = exact_steps
         self.restrict_kernel = restrict_kernel
         self.project_kernel = project_kernel
         self.max_depth = self.parse_schema(schema=schema)
@@ -23,6 +25,7 @@ class Multigrid:
         self.defects = []
         self.bs = []
         self.xs = []
+        self.corrections = []
 
         n = b.shape[0]
         m = b.shape[1]
@@ -30,6 +33,7 @@ class Multigrid:
         self.defects.append(np.zeros((n,m)))
         self.bs.append(self.b)
         self.xs.append(self.b)
+        self.corrections.append(np.zeros((n,m)))
         
         for depth in range(self.max_depth-1):
             assert n % 2 == 0 and m % 2 == 0
@@ -40,11 +44,11 @@ class Multigrid:
             self.defects.append(np.zeros((n,m)))
             self.xs.append(np.zeros((n,m)))
             self.bs.append(self.restrict(self.bs[depth]))
+            self.corrections.append(np.zeros((n,m)))
 
     def solve(self):
         # We want to find x such that Ax = b
-        # We can rewrite this as x = A_inv * b but this is not efficient
-        # Instead we can use multigrid to solve this problem
+        # We can rewrite this as x = A_inv * b but computing A_inv is very expensive
 
         # initial guess
         x = self.b
@@ -56,28 +60,36 @@ class Multigrid:
         depth = 0
         for map in self.schema:
             if map == "r":
-                # pre smoothing
-                self.defects[depth] = self.get_defect(self.b[depth], self.xs[depth])
-                correction = self.get_correction(x, self.defects[depth], self.smoothing_steps)
-                self.xs[depth] += correction
+                # pre approximate smoothing
+                self.defects[depth] =\
+                    self.get_defect(self.bs[depth], self.xs[depth])
+                self.corrections[depth] =\
+                    self.get_correction(self.defects[depth], self.approx_steps)
+                self.xs[depth] += self.corrections[depth]
 
-                # Compute defect and restrict for next lower level
-                self.defects[depth + 1] = self.restrict(self.get_defect[depth])
+                # Recompute defect and restrict for next lower level
+                self.defects[depth] = self.get_defect(self.bs[depth], self.xs[depth])
+                self.defects[depth + 1] = self.restrict(self.defects[depth])
 
                 # new depth
                 depth += 1
 
             elif map == "p":
+                if depth == self.max_depth - 1:
+                    # exact smoothing using precomputed defect
+                    self.xs[depth] =\
+                        self.smooth(self.defects[depth], self.bs[depth], self.exact_steps)
+
                 depth -= 1
-                self.defects[depth] = self.interpolate(self.get_defect[depth+1])
+                self.defects[depth] =\
+                    self.prolongate(self.bs[depth], self.get_defect[depth+1])
+                
+                self.xs[depth] += self.defects[depth]
 
-                # post smoothing
-                self.defects[depth] = self.get_defect(self.b[depth], self.xs[depth])
-                correction = self.get_correction(x, self.defects[depth], self.smoothing_steps)
-                self.xs[depth] += correction
+                # post approximate smoothing
+                self.smooth(depth, self.approx_steps)
 
-
-        return x
+        return self.xs[0]
     
     def get_correction(self, defect : np.ndarray, steps : int) -> np.ndarray:
         correction = solver.StencilJacobi(
@@ -88,10 +100,15 @@ class Multigrid:
     def get_defect(self, b : np.ndarray, x : np.ndarray) -> np.ndarray:
         return b - convolve(x, self.stencil, mode='constant')
     
+    def smooth(self, defect : np.ndarray, x : np.ndarray, steps):
+        correction = self.get_correction(defect, steps)
+        x += correction
+        return x
+    
     def restrict(self, x : np.ndarray) -> np.ndarray:
         convolve(x, self.restrict_kernel, mode="constant")[::2, ::2]
 
-    def interpolate(self, x : np.ndarray) -> np.ndarray:
+    def prolongate(self, x : np.ndarray) -> np.ndarray:
         x_res = np.zeros((2 * x.shape[0], 2 * x.shape[1]))
 
         x_res[::2, ::2] = x
@@ -100,9 +117,38 @@ class Multigrid:
         return x_res
     
     def parse_schema(self, schema : str) -> int:
-        self.schema = [char for char in schema]
-        assert all([char in ["r", "p"] for char in self.schema])
+        schema_list = [char for char in schema]
+        assert all([char in ["r", "p"] for char in schema_list])
         assert schema.count("r") == schema.count("p")
-        assert self.schema[0] == "r"
-        assert self.schema[-1] == "p"
+        assert schema_list[0] == "r"
+        assert schema_list[-1] == "p"
+
+        def map_func(x):
+            if x == "r":
+                return "restrict"
+            elif x == "p":
+                return "prolongate"
+            else:
+                raise ValueError("Invalid schema")
+            
+        schema_list = list(map(map_func, schema_list))
+
+        new_schema_list = []
+        for i in range(len(schema_list) - 1):
+            new_schema_list.append(schema_list[i])
+            # detect "rp" which is a valley where 
+            if schema_list[i] == "restrict" and schema_list[i+1] == "prolongate":
+                new_schema_list.append("smooth")
+
+            # detect "pr" which is a peak
+            if schema_list[i] == "prolongate" and schema_list[i+1] == "restrict":
+                new_schema_list.append("apply")
+
+        new_schema_list.append(schema_list[-1])
+        new_schema_list.append("apply")
+
+        print(new_schema_list)
+
+        self.schema = new_schema_list
+
         return len(self.schema) // 2
