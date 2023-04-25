@@ -10,7 +10,7 @@ class Multigrid:
             stencil : np.ndarray, 
             b : np.ndarray, 
             restrict_kernel : np.ndarray,
-            project_kernel : np.ndarray,
+            prolong_kernel : np.ndarray,
             schema : str = "rrpp",
             approximation_steps : int = 16,
             exact_steps : int = 128):
@@ -19,7 +19,7 @@ class Multigrid:
         self.approx_steps = approximation_steps
         self.exact_steps = exact_steps
         self.restrict_kernel = restrict_kernel
-        self.project_kernel = project_kernel
+        self.prolong_kernel = prolong_kernel
         self.max_depth = self.parse_schema(schema=schema)
 
         self.defects = []
@@ -35,11 +35,11 @@ class Multigrid:
         self.xs.append(self.b)
         self.corrections.append(np.zeros((n,m)))
         
-        for depth in range(self.max_depth-1):
+        for depth in range(self.max_depth):
             assert n % 2 == 0 and m % 2 == 0
 
-            n = n / 2
-            m = m / 2
+            n = int(n / 2)
+            m = int(m / 2)
 
             self.defects.append(np.zeros((n,m)))
             self.xs.append(np.zeros((n,m)))
@@ -59,8 +59,11 @@ class Multigrid:
         # coarse grid correction
         depth = 0
         for map in self.schema:
-            if map == "r":
+            if map == "restrict":
                 # pre approximate smoothing
+
+                # QUESTION: How to compute defect? Do we always use the same x or do we update the x 
+                # and then prolong and correct it?
                 self.defects[depth] =\
                     self.get_defect(self.bs[depth], self.xs[depth])
                 self.corrections[depth] =\
@@ -74,7 +77,7 @@ class Multigrid:
                 # new depth
                 depth += 1
 
-            elif map == "p":
+            elif map == "prolongate":
                 if depth == self.max_depth - 1:
                     # exact smoothing using precomputed defect
                     self.xs[depth] =\
@@ -88,6 +91,18 @@ class Multigrid:
 
                 # post approximate smoothing
                 self.smooth(depth, self.approx_steps)
+
+            elif map == "apply":
+                x = self.xs[0]
+            
+            elif map == "smooth":
+                self.smooth(depth, self.approx_steps)
+
+            else: 
+                raise ValueError("Unknown map: {}".format(map))
+
+        return x
+            
 
         return self.xs[0]
     
@@ -106,13 +121,13 @@ class Multigrid:
         return x
     
     def restrict(self, x : np.ndarray) -> np.ndarray:
-        convolve(x, self.restrict_kernel, mode="constant")[::2, ::2]
+        return convolve(x, self.restrict_kernel, mode="constant")[::2, ::2]
 
     def prolongate(self, x : np.ndarray) -> np.ndarray:
         x_res = np.zeros((2 * x.shape[0], 2 * x.shape[1]))
 
         x_res[::2, ::2] = x
-        x_res = convolve(x_res, self.project_kernel.T, mode="constant")
+        x_res = convolve(x_res, self.prolong_kernel.T, mode="constant")
 
         return x_res
     
@@ -122,6 +137,8 @@ class Multigrid:
         assert schema.count("r") == schema.count("p")
         assert schema_list[0] == "r"
         assert schema_list[-1] == "p"
+
+        print(schema_list)
 
         def map_func(x):
             if x == "r":
@@ -134,8 +151,16 @@ class Multigrid:
         schema_list = list(map(map_func, schema_list))
 
         new_schema_list = []
+        depth = 0
+        max_depth = 0
         for i in range(len(schema_list) - 1):
             new_schema_list.append(schema_list[i])
+            if schema_list[i] == "restrict":
+                depth += 1
+            else:
+                depth -= 1
+
+            max_depth = max(max_depth, depth)
             # detect "rp" which is a valley where 
             if schema_list[i] == "restrict" and schema_list[i+1] == "prolongate":
                 new_schema_list.append("smooth")
@@ -151,4 +176,6 @@ class Multigrid:
 
         self.schema = new_schema_list
 
-        return len(self.schema) // 2
+        print(max_depth)
+
+        return max_depth
