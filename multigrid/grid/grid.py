@@ -52,11 +52,9 @@ class Multigrid:
 
         # initial (bad) guess
         if x is None:
-            x = self.b
+            x = np.zeros(self.b.shape)
         depth = 0
 
-        print("Solving...")
-        print("Error: ", self.error(x))
         # pre smoothing
         self.defects[depth] =\
             self.get_defect(self.bs[depth], x)
@@ -66,13 +64,7 @@ class Multigrid:
             b=-self.defects[depth],
             max_iterations=self.smoothing_steps
         ).solve()
-        print("defect: ", -self.defects[depth])
-        print("x: ", x)
-        print("b: ", self.bs[depth])
-        print("corrections: ", self.corrections[depth])
         x += self.corrections[depth]
-
-        print("Error: ", self.error(x))
 
         # fine grid defect
         self.defects[depth] =\
@@ -92,7 +84,7 @@ class Multigrid:
                 # Improve correction
                 self.corrections[depth] = solver.StencilJacobi(
                     stencil=self.stencil,
-                    b=self.defects[depth],
+                    b=-self.defects[depth],
                     max_iterations=self.smoothing_steps
                 ).solve(self.corrections[depth])
 
@@ -107,7 +99,7 @@ class Multigrid:
                 # Improve correction
                 self.corrections[depth] = solver.StencilJacobi(
                     stencil=self.stencil,
-                    b=self.defects[depth],
+                    b=-self.defects[depth],
                     max_iterations=self.smoothing_steps
                 ).solve(self.corrections[depth])
 
@@ -115,7 +107,7 @@ class Multigrid:
                 # Improve correction
                 self.corrections[depth] = solver.StencilJacobi(
                     stencil=self.stencil,
-                    b=self.defects[depth],
+                    b=-self.defects[depth],
                     max_iterations=self.smoothing_steps
                 ).solve(self.corrections[depth])
                 
@@ -132,9 +124,9 @@ class Multigrid:
         
         self.corrections[depth] = solver.StencilJacobi(
             stencil=self.stencil,
-            b=self.defects[depth],
+            b=-self.defects[depth],
             max_iterations=self.smoothing_steps
-        ).solve()
+        ).solve(self.corrections[depth])
         x += self.corrections[depth]
 
         return x
