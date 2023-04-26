@@ -26,9 +26,10 @@ class StencilJacobi(solver.StencilSolver):
     def __init__(self, stencil : np.ndarray, b : np.ndarray, max_iterations : int = 256):
         super().__init__(stencil, b, max_iterations)
         
-    def solve(self):
-        x = np.zeros(self.b.shape)
-
+    def solve(self, x : np.ndarray = None):
+        if x is None:
+            x = np.zeros(self.b.shape)
+            
         for i in range(self.max_iterations):
             x += (self.b - convolve(x, self.stencil, mode="constant")) / self.stencil[1,1]
             if self.check_convergence(x):

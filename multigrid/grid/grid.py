@@ -12,12 +12,12 @@ class Multigrid:
             restrict_kernel : np.ndarray,
             prolong_kernel : np.ndarray,
             schema : str = "rrpp",
-            approximation_steps : int = 16,
+            correction_steps : int = 16,
             exact_steps : int = 128):
         self.stencil = stencil
         self.b = b
-        self.approx_steps = approximation_steps
-        self.exact_steps = exact_steps
+        self.smoothing_steps = correction_steps
+        self.correction_steps = exact_steps
         self.restrict_kernel = restrict_kernel
         self.prolong_kernel = prolong_kernel
         self.max_depth = self.parse_schema(schema=schema)
@@ -46,79 +46,101 @@ class Multigrid:
             self.bs.append(self.restrict(self.bs[depth]))
             self.corrections.append(np.zeros((n,m)))
 
-    def solve(self):
+    def solve(self, x : np.ndarray = None):
         # We want to find x such that Ax = b
         # We can rewrite this as x = A_inv * b but computing A_inv is very expensive
 
-        # initial guess
-        x = self.b
-
-        # Compute & Store defect
-        self.defects[0] = self.get_defect()
-
-        # coarse grid correction
+        # initial (bad) guess
+        if x is None:
+            x = self.b
         depth = 0
+
+        print("Solving...")
+        print("Error: ", self.error(x))
+        # pre smoothing
+        self.defects[depth] =\
+            self.get_defect(self.bs[depth], x)
+        
+        self.corrections[depth] = solver.StencilJacobi(
+            stencil=self.stencil,
+            b=-self.defects[depth],
+            max_iterations=self.smoothing_steps
+        ).solve()
+        print("defect: ", -self.defects[depth])
+        print("x: ", x)
+        print("b: ", self.bs[depth])
+        print("corrections: ", self.corrections[depth])
+        x += self.corrections[depth]
+
+        print("Error: ", self.error(x))
+
+        # fine grid defect
+        self.defects[depth] =\
+            self.get_defect(self.bs[depth], self.xs[depth])
+        
+        # coarse grid correction
         for map in self.schema:
             if map == "restrict":
-                # pre approximate smoothing
-
-                # QUESTION: How to compute defect? Do we always use the same x or do we update the x 
-                # and then prolong and correct it?
-                self.defects[depth] =\
-                    self.get_defect(self.bs[depth], self.xs[depth])
-                self.corrections[depth] =\
-                    self.get_correction(self.defects[depth], self.approx_steps)
-                self.xs[depth] += self.corrections[depth]
-
-                # Recompute defect and restrict for next lower level
-                self.defects[depth] = self.get_defect(self.bs[depth], self.xs[depth])
-                self.defects[depth + 1] = self.restrict(self.defects[depth])
-
-                # new depth
                 depth += 1
 
-            elif map == "prolongate":
-                if depth == self.max_depth - 1:
-                    # exact smoothing using precomputed defect
-                    self.xs[depth] =\
-                        self.smooth(self.defects[depth], self.bs[depth], self.exact_steps)
-
-                depth -= 1
+                # Restrict defect and correction
                 self.defects[depth] =\
-                    self.prolongate(self.bs[depth], self.get_defect[depth+1])
+                    self.restrict(self.defects[depth-1])
+                self.corrections[depth] =\
+                    self.restrict(self.corrections[depth-1])
                 
-                self.xs[depth] += self.defects[depth]
+                # Improve correction
+                self.corrections[depth] = solver.StencilJacobi(
+                    stencil=self.stencil,
+                    b=self.defects[depth],
+                    max_iterations=self.smoothing_steps
+                ).solve(self.corrections[depth])
 
-                # post approximate smoothing
-                self.smooth(depth, self.approx_steps)
+            elif map == "prolongate":
+                depth -= 1
+                # Prolong defect and correction
+                self.defects[depth] =\
+                    self.restrict(self.defects[depth+1])
+                self.corrections[depth] =\
+                    self.restrict(self.corrections[depth+1])
 
-            elif map == "apply":
-                x = self.xs[0]
-            
+                # Improve correction
+                self.corrections[depth] = solver.StencilJacobi(
+                    stencil=self.stencil,
+                    b=self.defects[depth],
+                    max_iterations=self.smoothing_steps
+                ).solve(self.corrections[depth])
+
             elif map == "smooth":
-                self.smooth(depth, self.approx_steps)
-
+                # Improve correction
+                self.corrections[depth] = solver.StencilJacobi(
+                    stencil=self.stencil,
+                    b=self.defects[depth],
+                    max_iterations=self.smoothing_steps
+                ).solve(self.corrections[depth])
+                
+            elif map == "apply":
+                pass
+            
             else: 
                 raise ValueError("Unknown map: {}".format(map))
 
+
+        # post smoothing
+        self.defects[depth] =\
+            self.get_defect(self.bs[depth], x)
+        
+        self.corrections[depth] = solver.StencilJacobi(
+            stencil=self.stencil,
+            b=self.defects[depth],
+            max_iterations=self.smoothing_steps
+        ).solve()
+        x += self.corrections[depth]
+
         return x
-            
-
-        return self.xs[0]
-    
-    def get_correction(self, defect : np.ndarray, steps : int) -> np.ndarray:
-        correction = solver.StencilJacobi(
-            self.stencil, defect, max_iterations=steps).solve()
-
-        return correction
     
     def get_defect(self, b : np.ndarray, x : np.ndarray) -> np.ndarray:
-        return b - convolve(x, self.stencil, mode='constant')
-    
-    def smooth(self, defect : np.ndarray, x : np.ndarray, steps):
-        correction = self.get_correction(defect, steps)
-        x += correction
-        return x
+        return convolve(x, self.stencil, mode='constant') - b
     
     def restrict(self, x : np.ndarray) -> np.ndarray:
         return convolve(x, self.restrict_kernel, mode="constant")[::2, ::2]
@@ -130,6 +152,9 @@ class Multigrid:
         x_res = convolve(x_res, self.prolong_kernel.T, mode="constant")
 
         return x_res
+    
+    def error(self, x : np.ndarray) -> float:
+        return np.linalg.norm(self.get_defect(self.b, x), ord=2)
     
     def parse_schema(self, schema : str) -> int:
         schema_list = [char for char in schema]
@@ -171,11 +196,5 @@ class Multigrid:
 
         new_schema_list.append(schema_list[-1])
         new_schema_list.append("apply")
-
-        print(new_schema_list)
-
         self.schema = new_schema_list
-
-        print(max_depth)
-
         return max_depth

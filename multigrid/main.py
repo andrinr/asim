@@ -16,6 +16,11 @@ multigrid = Grid(
     schema="rrrppp",
 )
 
+# Ax = b
+# set x = b
+# b - Ax = defect
+# A * correction = defect
+
 multigrid.solve()
 
 plt.imshow(multigrid)
